@@ -100,10 +100,4 @@
     }
   }, 500);
 
-  // ================================
-  // PERDA DE FOCO (ABRIR DEVTOOLS)
-  // ================================
-  window.addEventListener("blur", () => {
-    blockAccess();
-  });
 })();
