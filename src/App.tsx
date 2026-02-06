@@ -734,64 +734,79 @@ export function App() {
     if (activeProfile) await loadContent(activeProfile, type);
   };
 
-  const [top10, setTop10] = useState<Stream[]>([]);
-  const TMDB_API_KEY = "302e14c74c0902c7b6b5a18555ddd02d";
+  const top10 = useMemo(() => {
+    if (contentType === "live") {
+      return streams.slice(0, 10);
+    }
+    return streams.slice(0, 10);
+  }, [streams, contentType]);
+
+  const [top10WithTMDB, setTop10WithTMDB] = useState<Stream[]>([]);
+  const [isLoadingTop10, setIsLoadingTop10] = useState(false);
 
   useEffect(() => {
-    const fetchTop10 = async () => {
-      if (streams.length === 0) return;
-      
-      if (contentType === 'live') {
-        setTop10(streams.slice(0, 10));
+    const fetchTop10WithTMDB = async () => {
+      if (contentType === "live" || streams.length === 0) {
+        setTop10WithTMDB(top10);
         return;
       }
 
+      setIsLoadingTop10(true);
       try {
-        const tmdbType = contentType === 'movie' ? 'movie' : 'tv';
-        const url = `https://api.themoviedb.org/3/${tmdbType}/popular?api_key=${TMDB_API_KEY}&language=pt-BR&page=1`;
-        const response = await fetch(url);
+        const TMDB_API_KEY = "302e14c74c0902c7b6b5a18555ddd02d";
+        const mediaType = contentType === "movie" ? "movie" : "tv";
+        const response = await fetch(
+          `https://api.themoviedb.org/3/${mediaType}/popular?api_key=${TMDB_API_KEY}&language=pt-BR&page=1`
+        );
         const data = await response.json();
-        const popularTmdb = data.results || [];
+        const popularTitles = data.results || [];
 
-        const dynamicTop10: Stream[] = [];
-        const usedIds = new Set<string>();
+        const finalTop10: Stream[] = [];
+        const usedStreamIds = new Set<string>();
 
-        // 1. Tentar encontrar os populares do TMDB no servidor
-        for (const item of popularTmdb) {
-          if (dynamicTop10.length >= 10) break;
-          const name = (item.title || item.name || "").toLowerCase();
+        for (const tmdbItem of popularTitles) {
+          if (finalTop10.length >= 10) break;
+
+          const tmdbTitle = (tmdbItem.title || tmdbItem.name || "").toLowerCase();
+          const foundStream = streams.find(
+            (s) =>
+              !usedStreamIds.has(String(s.id)) &&
+              s.name.toLowerCase().includes(tmdbTitle)
+          );
+
+          if (foundStream) {
+            finalTop10.push(foundStream);
+            usedStreamIds.add(String(foundStream.id));
+          }
+        }
+
+        if (finalTop10.length < 10) {
+          const remainingStreams = streams.filter(
+            (s) => !usedStreamIds.has(String(s.id))
+          );
           
-          const match = streams.find(s => {
-            const sName = s.name.toLowerCase();
-            return sName.includes(name) || name.includes(sName);
-          });
-
-          if (match && !usedIds.has(match.id)) {
-            dynamicTop10.append ? null : dynamicTop10.push(match);
-            usedIds.add(match.id);
+          for (let i = 0; i < remainingStreams.length && finalTop10.length < 10; i++) {
+            const randomIndex = Math.floor(Math.random() * remainingStreams.length);
+            const randomStream = remainingStreams[randomIndex];
+            if (!usedStreamIds.has(String(randomStream.id))) {
+              finalTop10.push(randomStream);
+              usedStreamIds.add(String(randomStream.id));
+              remainingStreams.splice(randomIndex, 1);
+            }
           }
         }
 
-        // 2. Se faltar, preencher com aleatórios do servidor
-        if (dynamicTop10.length < 10) {
-          const available = streams.filter(s => !usedIds.has(s.id));
-          const shuffled = [...available].sort(() => 0.5 - Math.random());
-          for (const s of shuffled) {
-            if (dynamicTop10.length >= 10) break;
-            dynamicTop10.push(s);
-            usedIds.add(s.id);
-          }
-        }
-
-        setTop10(dynamicTop10.slice(0, 10));
-      } catch (err) {
-        console.error("Erro ao buscar Top 10 TMDB", err);
-        setTop10(streams.slice(0, 10));
+        setTop10WithTMDB(finalTop10);
+      } catch (error) {
+        console.error("Erro ao buscar dados do TMDB:", error);
+        setTop10WithTMDB(top10);
+      } finally {
+        setIsLoadingTop10(false);
       }
     };
 
-    fetchTop10();
-  }, [streams, contentType]);
+    fetchTop10WithTMDB();
+  }, [streams, contentType, top10]);
 
   useEffect(() => {
     const cached = contentCache[contentType];
@@ -1055,6 +1070,7 @@ export function App() {
     setVodCandidates([]);
     setVodCurrentIndex(0);
     setVodStatus("loading");
+    setStreamCandidates([]);
     setCurrentStreamIndex(0);
     setIsContentOffline(false);
     setError("");
@@ -1259,13 +1275,13 @@ export function App() {
               </section>
             ) : (
               <>
-                {selectedCategoryId === null && top10.length > 0 && !loading && (
+                {selectedCategoryId === null && top10WithTMDB.length > 0 && !loading && (
                   <section className="space-y-3 animate-in fade-in duration-700">
                     <h3 className="text-lg sm:text-xl font-bold text-gray-100 flex items-center gap-2">
                       <span className="text-red-600 font-black">TOP 10</span> {contentType === 'live' ? 'Canais' : contentType === 'movie' ? 'Filmes' : 'Séries'} Hoje
                     </h3>
                     <div className="flex overflow-x-auto space-x-3 sm:space-x-4 pb-4 scrollbar-hide -mx-2 px-2">
-                      {top10.map((s, idx) => (
+                      {top10WithTMDB.map((s, idx) => (
                         <button key={s.id} onClick={() => openDetails(s)} className="flex-shrink-0 w-40 sm:w-56 text-left group">
                           <div className="relative aspect-video bg-gray-800 rounded-md overflow-hidden ring-1 ring-white/10 group-hover:ring-white/40 transition">
                             {s.icon ? (
@@ -1366,121 +1382,208 @@ export function App() {
                       <div className="flex items-center gap-3 sm:gap-4 text-xs sm:text-sm font-medium flex-wrap">
                         {(selectedContentInfo.rating || selectedContentInfo.rating_5based) && <span className="text-green-500">★ {selectedContentInfo.rating || selectedContentInfo.rating_5based}</span>}
                         {(selectedContentInfo.releasedate || selectedContentInfo.release_date || selectedStream.year) && <span className="text-gray-400">{selectedContentInfo.releasedate || selectedContentInfo.release_date || selectedStream.year}</span>}
-                        {(selectedContentInfo.duration || selectedContentInfo.runtime) && <span className="text-gray-400">{selectedContentInfo.duration || selectedContentInfo.runtime} min</span>}
-                        {selectedContentInfo.genre && <span className="text-gray-400">{selectedContentInfo.genre}</span>}
+                        {(selectedContentInfo.genre || selectedStream.genre) && <span className="border border-gray-600 px-1.5 py-0.5 text-[10px] rounded uppercase">{selectedContentInfo.genre || selectedStream.genre}</span>}
                       </div>
 
-                      <p className="text-gray-300 text-sm sm:text-base leading-relaxed line-clamp-6">
-                        {selectedContentInfo.plot || selectedContentInfo.description || "Sem descrição disponível."}
-                      </p>
+                      <p className="text-gray-300 leading-relaxed text-sm sm:text-lg line-clamp-4 sm:line-clamp-none">{selectedContentInfo.plot || selectedContentInfo.description || "Nenhum resumo disponível."}</p>
 
-                      {contentType === "movie" ? (
-                        <button onClick={() => startVodPlayback(selectedStream)} className="w-full sm:w-auto bg-white text-black font-bold py-3 px-8 rounded hover:bg-gray-200 transition flex items-center justify-center gap-2">
-                          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" /></svg>
-                          Assistir Agora
+                      <div className="text-xs sm:text-sm space-y-1">
+                        {(selectedContentInfo.director || selectedStream.director) && <div><span className="text-gray-500">Direção:</span> {selectedContentInfo.director || selectedStream.director}</div>}
+                        {(selectedContentInfo.cast || selectedContentInfo.actors || selectedStream.cast) && <div><span className="text-gray-500">Elenco:</span> {selectedContentInfo.cast || selectedContentInfo.actors || selectedStream.cast}</div>}
+                      </div>
+
+                      {contentType === "movie" && (
+                        <button onClick={() => startVodPlayback(selectedStream)} className="mt-4 sm:mt-6 bg-white text-black font-bold px-6 sm:px-8 py-2 sm:py-3 rounded flex items-center gap-2 hover:bg-gray-200 transition text-base sm:text-lg">
+                          ▶ Assistir Agora
                         </button>
-                      ) : (
-                        <div className="space-y-4 sm:space-y-6">
-                          <div className="flex items-center gap-4 border-b border-white/10 pb-2">
-                            <h3 className="font-bold text-lg">Episódios</h3>
-                            <select value={selectedSeason} onChange={(e) => setSelectedSeason(Number(e.target.value))} className="bg-transparent text-sm font-bold focus:outline-none">
-                              {availableSeasons.map(s => <option key={s} value={s} className="bg-gray-900">Temporada {s}</option>)}
-                            </select>
-                          </div>
-                          
-                          <div className="grid gap-2 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
-                            {currentEpisodes.map((ep: any) => (
-                              <button key={ep.id} onClick={() => startVodPlayback(selectedStream, ep)} className="flex items-center gap-4 p-2 rounded hover:bg-white/5 text-left group transition">
-                                <div className="text-gray-500 font-mono text-sm w-6">{ep.episode_num}</div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="text-sm font-medium group-hover:text-red-500 transition truncate">{ep.title}</div>
-                                </div>
-                                <div className="opacity-0 group-hover:opacity-100 transition text-red-500">
-                                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" /></svg>
-                                </div>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
                       )}
                     </div>
                   </div>
+
+                  {contentType === "series" && seriesDetails && (
+                    <div className="p-4 sm:p-8 border-t border-gray-800">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 sm:mb-6 gap-3">
+                        <h3 className="text-xl sm:text-2xl font-bold">Episódios</h3>
+                        <select value={selectedSeason} onChange={(e) => setSelectedSeason(Number(e.target.value))} className="bg-gray-800 border border-gray-700 rounded px-4 py-2 focus:outline-none focus:ring-2 focus:ring-red-600 text-sm sm:text-base">
+                          {availableSeasons.map((seasonNum) => (<option key={seasonNum} value={seasonNum}>Temporada {seasonNum}</option>))}
+                        </select>
+                      </div>
+
+                      <div className="space-y-3 sm:space-y-4 max-h-[50vh] overflow-y-auto">
+                        {currentEpisodes.length === 0 && <div className="text-gray-400 text-center py-8">Nenhum episódio encontrado.</div>}
+                        {currentEpisodes.map((ep: any, idx: number) => (
+                          <button key={ep.id || idx} onClick={() => startVodPlayback(selectedStream, ep)} className="w-full flex items-center gap-3 sm:gap-4 p-3 sm:p-4 rounded-lg bg-gray-800/50 hover:bg-gray-800 transition group border border-transparent hover:border-gray-700 text-left">
+                            <div className="flex-shrink-0 w-6 sm:w-8 text-xl sm:text-2xl font-bold text-gray-600 group-hover:text-white transition">{ep.episode_num || idx + 1}</div>
+                            <div className="flex-shrink-0 w-24 sm:w-32 aspect-video bg-gray-700 rounded overflow-hidden">
+                              <img src={ep.info?.movie_image || selectedStream.icon} className="w-full h-full object-cover" alt="" onError={(e) => (e.target as HTMLImageElement).src = "https://via.placeholder.com/160x90?text=Ep"} />
+                            </div>
+                            <div className="flex-grow min-w-0">
+                              <div className="font-bold text-sm sm:text-lg truncate">{ep.title || `Episódio ${ep.episode_num || idx + 1}`}</div>
+                              <div className="text-xs sm:text-sm text-gray-400 line-clamp-2 mt-1">{ep.info?.plot || ""}</div>
+                            </div>
+                            <div className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition">
+                              <svg className="w-6 h-6 sm:w-8 sm:h-8 text-white" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" /></svg>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
           )}
+        </div>
+      )}
 
-          {/* PLAYER OVERLAY */}
-          {view === "player" && selectedStream && (
-            <div className="fixed inset-0 z-[100] bg-black flex flex-col animate-in fade-in duration-300">
-              <div className="absolute top-0 left-0 right-0 p-4 sm:p-6 z-10 flex justify-between items-start bg-gradient-to-b from-black/80 to-transparent">
-                <button onClick={stopPlayback} className="flex items-center gap-2 text-white/70 hover:text-white transition group">
-                  <svg className="w-6 h-6 group-hover:-translate-x-1 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-                  <span className="font-medium">Voltar</span>
-                </button>
-                <div className="flex flex-col items-end gap-1">
-                  <div className="text-white font-bold text-sm sm:text-lg drop-shadow-md">{selectedEpisode ? selectedEpisode.title : selectedStream.name}</div>
-                  {selectedEpisode && <div className="text-gray-400 text-xs">Temporada {selectedSeason} • Episódio {selectedEpisode.episode_num}</div>}
+      {/* VOD PLAYER (FILMES/SÉRIES) */}
+      {view === "player" && activeProfile && selectedStream && contentType !== "live" && vodCandidates.length > 0 && (
+        <div className="fixed inset-0 bg-black z-50 flex flex-col">
+          <div className="relative flex-grow bg-black">
+            <button onClick={stopPlayback} className="absolute top-4 left-4 sm:top-6 sm:left-6 text-white hover:text-red-500 z-50 flex items-center space-x-2 bg-black/60 px-3 sm:px-4 py-2 rounded-full backdrop-blur-md border border-white/10 transition-colors">
+              <span className="font-medium text-sm sm:text-base">← Voltar</span>
+            </button>
+
+            <div className="absolute top-4 right-4 sm:top-6 sm:right-6 z-50 bg-black/60 px-3 py-1 rounded-full backdrop-blur-md border border-white/10">
+              <span className="text-[10px] sm:text-xs text-gray-300">
+                {vodStatus === "loading" ? `Carregando... (${vodCurrentIndex + 1}/${vodCandidates.length})` : 
+                 vodStatus === "playing" ? "▶ Reproduzindo" : 
+                 "⚠ Offline"}
+              </span>
+            </div>
+
+            <div className="w-full h-full flex items-center justify-center">
+              {vodStatus === "offline" ? (
+                <div className="flex flex-col items-center gap-4 text-center px-6 max-w-sm">
+                  <div className="text-4xl">⚠️</div>
+                  <div className="text-xl font-bold text-white">Conteúdo Indisponível</div>
+                  <p className="text-gray-400 text-sm">Não foi possível carregar este conteúdo. O servidor pode estar offline ou o conteúdo foi removido.</p>
+                  <button onClick={stopPlayback} className="mt-2 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded transition">Voltar</button>
                 </div>
-              </div>
+              ) : (
+                <DirectVideoPlayer
+                  key={currentVodUrl}
+                  url={currentVodUrl}
+                  className="w-full h-full object-contain"
+                  onCanPlay={onVodPlaying}
+                  onTimeUpdate={onVodPlaying}
+                  onError={onVodError}
+                />
+              )}
 
-              <div className="flex-1 relative flex items-center justify-center">
-                {contentType === "live" ? (
-                  <>
-                    {isContentOffline ? (
-                      <div className="text-center p-6 animate-in zoom-in duration-300">
-                        <div className="text-5xl mb-4">⚠️</div>
-                        <h3 className="text-xl font-bold mb-2">Canal Temporariamente Offline</h3>
-                        <p className="text-gray-400 max-w-md mx-auto">Não foi possível conectar a este canal. Tente novamente mais tarde ou escolha outro canal.</p>
-                        <button onClick={stopPlayback} className="mt-6 bg-white text-black px-8 py-2 rounded-full font-bold hover:bg-gray-200 transition">Voltar para a lista</button>
-                      </div>
-                    ) : currentLiveUrl ? (
-                      <LivePlayer 
-                        url={currentLiveUrl} 
-                        format={currentLiveStream.format}
-                        className="w-full h-full" 
-                        onError={tryNextLiveStream}
-                        onPlay={() => { liveStartedRef.current = true; setIsTryingAlternative(false); }}
-                      />
-                    ) : null}
-                    
-                    {isTryingAlternative && !isContentOffline && (
-                      <div className="absolute bottom-20 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 flex items-center gap-3 z-20">
-                        <div className="w-4 h-4 border-2 border-red-600 border-t-transparent rounded-full animate-spin"></div>
-                        <div className="text-xs text-white font-medium">Otimizando conexão...</div>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    {vodStatus === "offline" ? (
-                      <div className="text-center p-6 animate-in zoom-in duration-300">
-                        <div className="text-5xl mb-4">❌</div>
-                        <h3 className="text-xl font-bold mb-2">Erro ao carregar vídeo</h3>
-                        <p className="text-gray-400">O conteúdo solicitado não está disponível no momento.</p>
-                        <button onClick={stopPlayback} className="mt-6 bg-white text-black px-8 py-2 rounded-full font-bold hover:bg-gray-200 transition">Voltar</button>
-                      </div>
-                    ) : currentVodUrl ? (
-                      <DirectVideoPlayer 
-                        url={currentVodUrl} 
-                        className="w-full h-full" 
-                        onError={onVodError}
-                        onCanPlay={onVodPlaying}
-                        onTimeUpdate={onVodPlaying}
-                      />
-                    ) : null}
-                  </>
-                )}
-
-                {(vodStatus === "loading" || (contentType === "live" && !currentLiveUrl && !isContentOffline)) && (
-                  <div className="flex flex-col items-center gap-3 z-10">
-                    <div className="w-12 h-12 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div>
-                    <div className="text-white/50 text-sm font-medium">Carregando...</div>
+              {vodStatus === "loading" && (
+                <div className="absolute inset-0 bg-black/60 backdrop-blur-sm z-40 flex items-center justify-center pointer-events-none">
+                  <div className="flex flex-col items-center gap-4 text-center px-6">
+                    <div className="w-12 h-12 border-4 border-red-600 border-t-transparent rounded-full animate-spin" />
+                    <div>
+                      <div className="text-lg font-bold text-white mb-1">Carregando conteúdo...</div>
+                      <div className="text-sm text-gray-400">Tentativa {vodCurrentIndex + 1} de {vodCandidates.length}</div>
+                    </div>
                   </div>
-                )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="p-4 sm:p-6 bg-gradient-to-t from-gray-900 via-gray-900 to-black border-t border-gray-800">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-3">
+              <div className="min-w-0 flex-1">
+                <h1 className="text-lg sm:text-2xl font-bold truncate">{selectedEpisode?.title || selectedStream.name}</h1>
+                <div className="text-xs sm:text-sm text-gray-400 mt-1">
+                  {vodStatus === "playing" ? "Reproduzindo via conexão direta" : vodStatus === "loading" ? "Conectando ao servidor..." : "Conteúdo indisponível"}
+                </div>
               </div>
             </div>
-          )}
+          </div>
+        </div>
+      )}
+
+      {/* LIVE PLAYER (CANAIS) */}
+      {view === "player" && activeProfile && selectedStream && contentType === "live" && streamCandidates.length > 0 && (
+        <div className="fixed inset-0 bg-black z-50 flex flex-col">
+          <div className="relative flex-grow bg-black">
+            <button onClick={stopPlayback} className="absolute top-4 left-4 sm:top-6 sm:left-6 text-white hover:text-red-500 z-50 flex items-center space-x-2 bg-black/60 px-3 sm:px-4 py-2 rounded-full backdrop-blur-md border border-white/10 transition-colors">
+              <span className="font-medium text-sm sm:text-base">← Voltar</span>
+            </button>
+
+            <div className="absolute top-4 right-4 sm:top-6 sm:right-6 z-50 bg-black/60 px-3 py-1 rounded-full backdrop-blur-md border border-white/10">
+              <span className="text-[10px] sm:text-xs text-gray-300">
+                {isTryingAlternative ? "Conectando..." : "▶ Ao vivo"}
+              </span>
+            </div>
+
+            <div className="w-full h-full">
+              <LivePlayer 
+                  key={`live-${currentStreamIndex}-${currentLiveUrl}`}
+                  url={currentLiveUrl}
+                  format={currentLiveStream?.format || "ts"}
+                  className="w-full h-full object-contain"
+                  onError={() => {
+                    if (!liveStartedRef.current) tryNextLiveStream();
+                  }}
+                  onPlay={() => {
+                    liveStartedRef.current = true;
+                    setIsTryingAlternative(false);
+                    if (streamTimeoutRef.current) {
+                      clearTimeout(streamTimeoutRef.current);
+                      streamTimeoutRef.current = null;
+                    }
+                  }}
+                />
+
+              {isTryingAlternative && !isContentOffline && (
+                <div className="absolute inset-0 bg-black/60 backdrop-blur-md z-40 flex items-center justify-center">
+                  <div className="flex flex-col items-center gap-4 text-center px-6">
+                    <div className="w-12 h-12 border-4 border-red-600 border-t-transparent rounded-full animate-spin" />
+                    <div>
+                      <div className="text-lg font-bold text-white mb-1">Aguarde, estamos conectando com o servidor...</div>
+                      <div className="text-sm text-gray-400">Isso pode levar alguns segundos</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {isContentOffline && (
+                <div className="absolute inset-0 bg-black/90 z-40 flex items-center justify-center">
+                  <div className="flex flex-col items-center gap-4 text-center px-6 max-w-sm">
+                    <div className="text-4xl">⚠️</div>
+                    <div className="text-xl font-bold text-white">Canal Indisponível</div>
+                    <p className="text-gray-400 text-sm">Não foi possível carregar este canal. O servidor pode estar offline.</p>
+                    <button onClick={stopPlayback} className="mt-2 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded transition">Voltar</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="p-4 sm:p-6 bg-gradient-to-t from-gray-900 via-gray-900 to-black border-t border-gray-800">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-3">
+              <div className="min-w-0 flex-1">
+                <h1 className="text-lg sm:text-2xl font-bold truncate">{selectedStream.name}</h1>
+                <div className="text-xs sm:text-sm text-gray-400 mt-1">
+                  {isTryingAlternative ? "Conectando ao servidor..." : isContentOffline ? "Canal indisponível" : "Transmissão ao vivo"}
+                </div>
+                {epgData && selectedStream.epgChannelId && (() => {
+                  const channelProgs = epgData.channelMap.get(selectedStream.epgChannelId) || [];
+                  const now = new Date();
+                  const currentProg = channelProgs.find(p => {
+                    const start = new Date(p.start.replace(/(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/, '$1-$2-$3T$4:$5:$6'));
+                    const stop = new Date(p.stop.replace(/(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/, '$1-$2-$3T$4:$5:$6'));
+                    return now >= start && now <= stop;
+                  });
+                  if (currentProg) {
+                    return (
+                      <div className="mt-2 text-xs sm:text-sm text-gray-300 border-t border-gray-700 pt-2">
+                        <div className="font-semibold text-white">Agora: {currentProg.title}</div>
+                        {currentProg.desc && <div className="text-gray-400 line-clamp-2 mt-1">{currentProg.desc}</div>}
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
