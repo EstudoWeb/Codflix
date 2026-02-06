@@ -1,4 +1,3 @@
-//Sistema-anti-inspecetc
 (function () {
   // ================================
   // CONFIG
