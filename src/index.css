@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+/* Hide scrollbars but keep scrolling (used by horizontal rows) */
+.scrollbar-hide {
+  -ms-overflow-style: none; /* IE/Edge */
+  scrollbar-width: none; /* Firefox */
+}
+.scrollbar-hide::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
