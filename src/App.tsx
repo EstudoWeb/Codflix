@@ -927,8 +927,8 @@ export function App() {
     const ext = episode?.container_extension || stream.containerExtension || 'mp4';
     const type = contentType === "series" ? "series" : "movie";
 
-    const codetabsUrl1 = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(`${normalizeBaseUrl(activeProfile.baseUrl)}/${type}/${activeProfile.username}/${activeProfile.password}/${streamId}.${ext}`)}`;
-    const codetabsUrl2 = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(`${normalizeBaseUrl(activeProfile.baseUrl)}/${type}/${activeProfile.username}/${activeProfile.password}/${streamId}`)}`;
+    const codetabsUrl1 = `${encodeURIComponent(`${normalizeBaseUrl(activeProfile.baseUrl)}/${type}/${activeProfile.username}/${activeProfile.password}/${streamId}.${ext}`)}`;
+    const codetabsUrl2 = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(`${normalizeBaseUrl(activeProfile.baseUrl)}/${type}/${activeProfile.username}/${activeProfile.password}/${streamId}.mp4`)}`;
     const codetabsUrl3 = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(`${normalizeBaseUrl(activeProfile.baseUrl)}/${type}/${activeProfile.username}/${activeProfile.password}/${streamId}.mp4`)}`;
     
     const candidates = [codetabsUrl1, codetabsUrl2, codetabsUrl3];
