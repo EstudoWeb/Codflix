@@ -12,23 +12,6 @@ import {
 } from "@/lib/xtream";
 import { generateStreamCandidates, type StreamCandidate } from "@/lib/streamTester";
 import serversJson from "./servers5684.json";
-
-// ================================
-// PROXY FIX (NOVO)
-// ================================
-const ALLORIGINS = "https://api.allorigins.win/raw?url=";
-
-function withProxyIfNeeded(url: string) {
-  try {
-    const u = new URL(url.startsWith("http") ? url : `http://${url}`);
-    // Se site é HTTPS e stream é HTTP → força proxy
-    if (window.location.protocol === "https:" && u.protocol === "http:") {
-      return ALLORIGINS + encodeURIComponent(url);
-    }
-  } catch {}
-  return url;
-}
-
 // Componente para vídeo HTML puro (MP4, MKV, etc.)
 const DirectVideoPlayer = ({ 
   url, 
@@ -51,27 +34,49 @@ const DirectVideoPlayer = ({
     
     if (videoRef.current && url) {
       const video = videoRef.current;
-      const finalUrl = withProxyIfNeeded(url);
-
+      
       video.pause();
       video.removeAttribute('src');
       video.load();
-
-      video.src = finalUrl;
+      
+      video.src = url;
       video.load();
+      
+      const playVideo = () => {
+        video.play().catch(() => {});
+      };
+      
+      video.addEventListener('loadeddata', playVideo, { once: true });
+      
+      return () => {
+        video.removeEventListener('loadeddata', playVideo);
+      };
     }
   }, [url]);
 
   return (
-    <video
-      ref={videoRef}
-      className={className}
-      controls
+    <video 
+      ref={videoRef} 
+      className={className} 
+      controls 
       autoPlay
       playsInline
-      onError={onError}
-      onCanPlay={onCanPlay}
-      onTimeUpdate={onTimeUpdate}
+      crossOrigin="anonymous"
+      style={{position: "absolute"}}
+      onCanPlay={() => {
+        onCanPlay?.();
+      }}
+      onTimeUpdate={() => {
+        if (!hasStartedRef.current && videoRef.current && videoRef.current.currentTime > 0) {
+          hasStartedRef.current = true;
+          onTimeUpdate?.();
+        }
+      }}
+      onError={(e) => {
+        const video = e.currentTarget;
+        const error = video.error;
+        onError?.();
+      }}
     />
   );
 };
