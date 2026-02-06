@@ -1026,7 +1026,11 @@ export function App() {
 
   const currentVodUrl = vodCandidates[vodCurrentIndex] || "";
   const currentLiveStream = streamCandidates[currentStreamIndex];
-  const currentLiveUrl = currentLiveStream?.url || "";
+const currentLiveUrl =
+  currentLiveStream?.url && activeProfile.proxyMode === "allorigins"
+    ? `https://api.allorigins.win/raw?url=${encodeURIComponent(currentLiveStream.url)}`
+    : currentLiveStream?.url || "";
+
 
   return (
     <div className="min-h-screen bg-black text-white font-sans selection:bg-red-600 selection:text-white">
