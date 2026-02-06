@@ -560,7 +560,7 @@ export function App() {
   const detectProxyMode = (inputUrl: string): ProxyMode => {
     try {
       const urlObj = new URL(inputUrl.includes("://") ? inputUrl : `http://${inputUrl}`);
-      if (urlObj.protocol === "http:" && window.location.protocol === "https:") return "direct";
+      if (urlObj.protocol === "http:" && window.location.protocol === "https:") return "allorigins";
       return "direct";
     } catch { return "allorigins"; }
   };
