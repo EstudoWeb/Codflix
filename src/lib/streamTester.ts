@@ -12,7 +12,8 @@ export interface StreamCandidate {
 
 // Proxies que suportam streaming contínuo
 const PROXIES = [
-  'https://api.allorigins.win/raw?url=',
+  'https://api.codetabs.com/v1/proxy?quest=',
+  'https://corsproxy.org/?',
 ];
 
 function uniqByUrl(items: StreamCandidate[]) {
