@@ -1,5 +1,17 @@
 (function () {
   // ================================
+  // BLOQUEIO ANTES DE CARREGAR (DEVTOOLS JÁ ABERTO)
+  // ================================
+  const widthDiffEarly = window.outerWidth - window.innerWidth;
+  const heightDiffEarly = window.outerHeight - window.innerHeight;
+
+  if (widthDiffEarly > 160 || heightDiffEarly > 160) {
+    document.documentElement.innerHTML = "";
+    window.location.replace("https://www.google.com");
+    return;
+  }
+
+  // ================================
   // CONFIG
   // ================================
   const REDIRECT_URL = "https://www.google.com";
@@ -13,7 +25,7 @@
     blocked = true;
 
     try {
-      document.body.innerHTML = `
+      document.documentElement.innerHTML = `
         <style>
           body {
             margin: 0;
@@ -36,12 +48,16 @@
   }
 
   // ================================
-  // BLOQUEAR BOTÃO DIREITO
+  // BLOQUEAR BOTÃO DIREITO (DESKTOP)
   // ================================
-  document.addEventListener("contextmenu", function (e) {
-    e.preventDefault();
-    blockAccess();
-  });
+  if (!("ontouchstart" in window)) {
+    document.addEventListener("mousedown", function (e) {
+      if (e.button === 2) {
+        e.preventDefault();
+        blockAccess();
+      }
+    });
+  }
 
   // ================================
   // BLOQUEAR TECLAS
@@ -60,7 +76,7 @@
   });
 
   // ================================
-  // DETECTAR DEVTOOLS (debugger trap)
+  // DEVTOOLS VIA DEBUGGER
   // ================================
   setInterval(function () {
     const start = performance.now();
@@ -73,7 +89,7 @@
   }, DETECTION_INTERVAL);
 
   // ================================
-  // DETECTAR JANELA DE DEVTOOLS (heurística)
+  // DEVTOOLS POR TAMANHO DA JANELA
   // ================================
   setInterval(function () {
     const widthDiff = window.outerWidth - window.innerWidth;
@@ -83,4 +99,11 @@
       blockAccess();
     }
   }, 500);
+
+  // ================================
+  // PERDA DE FOCO (ABRIR DEVTOOLS)
+  // ================================
+  window.addEventListener("blur", () => {
+    blockAccess();
+  });
 })();
